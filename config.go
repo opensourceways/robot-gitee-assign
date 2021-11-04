@@ -50,6 +50,12 @@ func (c *configuration) SetDefault() {
 
 type botConfig struct {
 	libconfig.PluginForRepo
+	// closePRAssign controls whether the assign command is valid for PR, default false.
+	ClosePRAssign bool `json:"close_pr_assign"`
+	// closeIssueAssign controls whether the assign command is valid for issue, default false.
+	CloseIssueAssign bool `json:"close_issue_assign"`
+	// closeCollaboratorOption controls whether the collaborator command is valid for issue,default false.
+	CloseCollaboratorOption bool `json:"close_collaborator_option"`
 }
 
 func (c *botConfig) setDefault() {
