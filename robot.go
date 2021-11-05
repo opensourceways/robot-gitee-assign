@@ -3,27 +3,21 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/opensourceways/community-robot-lib/utils"
 	"strings"
 
 	sdk "gitee.com/openeuler/go-gitee/gitee"
 	libconfig "github.com/opensourceways/community-robot-lib/config"
 	"github.com/opensourceways/community-robot-lib/giteeclient"
 	libplugin "github.com/opensourceways/community-robot-lib/giteeplugin"
+	"github.com/opensourceways/community-robot-lib/utils"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 const (
-	botName           = "assign"
-	addOperation      = "adding"
-	removeOperation   = "removing"
-	assignOperation   = "assign"
-	unassignOperation = "unassign"
-	logAssignIssueMsg = "%s assignee(s) from %s/%s#%s: %v"
-	logAssignPRMsg    = "%s assignee(s) from %s/%s#%d: %v"
-	assigneeErrMsg    = "assignee(s) **%s** can not be %s, make sure the assignee is a repository collaborator, otherwise please try again."
-	moreThenOneMsg    = "assignee(s) **%s** can not be %s, because the [un]assign command can only assign one person to an issue"
+	botName        = "assign"
+	assigneeErrMsg = "assignee(s) **%s** can not be %s, make sure the assignee is a repository collaborator, otherwise please try again."
+	moreThenOneMsg = "assignee(s) **%s** can not be %s, because the [un]assign command can only assign one person to an issue"
 )
 
 type iClient interface {
@@ -102,10 +96,9 @@ func (bot *robot) handlePR(e giteeclient.PRNoteEvent, cfg *botConfig, log *logru
 	var commandResult []string
 
 	if len(mu.Removes) > 0 {
-		log.Info(fmt.Printf(logAssignPRMsg, removeOperation, prInfo.Org, prInfo.Repo, prInfo.Number, mu.Removes))
 		if err := bot.cli.UnassignPR(prInfo.Org, prInfo.Repo, prInfo.Number, mu.Removes); err != nil {
-			log.Errorf(logAssignPRMsg, mu.Removes, prInfo.Org, prInfo.Repo, prInfo.Number, err.Error())
-			commandResult = append(commandResult, fmt.Sprintf(assigneeErrMsg, strings.Join(mu.Removes, ","), unassignOperation))
+			commandResult = append(commandResult, fmt.Sprintf(assigneeErrMsg, strings.Join(mu.Removes, ","), "unassign"))
+			log.Error(err)
 		}
 	}
 
@@ -123,41 +116,23 @@ func (bot *robot) handlePR(e giteeclient.PRNoteEvent, cfg *botConfig, log *logru
 	return bot.cli.CreatePRComment(prInfo.Org, prInfo.Repo, prInfo.Number, comment)
 }
 
-func (bot *robot) handleIssue(e giteeclient.IssueNoteEvent, cfg *botConfig, log *logrus.Entry) error {
-	multiErrors := utils.NewMultiErrors()
-	if !cfg.CloseIssueAssign {
-		multiErrors.AddError(bot.issueAssignOperate(e, log))
-	}
-
-	if !cfg.CloseCollaboratorOption {
-		multiErrors.AddError(bot.issueCollaboratorOperate(e, log))
-	}
-
-	return multiErrors.Err()
-}
-
 func (bot *robot) handlePRAssign(prInfo giteeclient.PRInfo, adds []string, log *logrus.Entry) []string {
 	var assignRes []string
-	log.Info(fmt.Printf(logAssignPRMsg, addOperation, prInfo.Org, prInfo.Repo, prInfo.Number, adds))
 
-	logErr := func(err string) {
-		log.Errorf(logAssignPRMsg, addOperation, adds, prInfo.Org, prInfo.Repo, prInfo.Number, err)
-	}
-
-	csSet, err := bot.getReposCollaborators(prInfo.Org, prInfo.Repo)
+	repoCollaborateSet, err := bot.getReposCollaborators(prInfo.Org, prInfo.Repo)
 	if err != nil {
-		logErr(err.Error())
-		return append(assignRes, fmt.Sprintf(assigneeErrMsg, strings.Join(adds, ","), assignOperation))
+		log.Error(err)
+		return append(assignRes, fmt.Sprintf(assigneeErrMsg, strings.Join(adds, ","), "assign"))
 	}
 
 	addSet := sets.NewString(adds...)
-	cantAdds := addSet.Difference(csSet)
+	cantAdds := addSet.Difference(repoCollaborateSet)
 	canAdds := addSet.Difference(cantAdds)
 
 	if len(canAdds) > 0 {
 		if err := bot.cli.AssignPR(prInfo.Org, prInfo.Repo, prInfo.Number, canAdds.List()); err != nil {
-			logErr(err.Error())
-			assignRes = append(assignRes, fmt.Sprintf(assigneeErrMsg, strings.Join(canAdds.List(), ","), assignOperation))
+			assignRes = append(assignRes, fmt.Sprintf(assigneeErrMsg, strings.Join(canAdds.List(), ","), "assign"))
+			log.Error(err)
 		}
 	}
 
@@ -168,7 +143,20 @@ func (bot *robot) handlePRAssign(prInfo giteeclient.PRInfo, adds []string, log *
 	return assignRes
 }
 
-func (bot *robot) issueAssignOperate(e giteeclient.IssueNoteEvent, log *logrus.Entry) error {
+func (bot *robot) handleIssue(e giteeclient.IssueNoteEvent, cfg *botConfig, log *logrus.Entry) error {
+	multiErrors := utils.NewMultiErrors()
+	if !cfg.CloseIssueAssign {
+		multiErrors.AddError(bot.handleIssueAssignee(e, log))
+	}
+
+	if !cfg.CloseCollaboratorOption {
+		multiErrors.AddError(bot.handleIssueCollaborator(e, log))
+	}
+
+	return multiErrors.Err()
+}
+
+func (bot *robot) handleIssueAssignee(e giteeclient.IssueNoteEvent, log *logrus.Entry) error {
 	mu := matchAssign(e.GetComment(), e.GetCommenter())
 	if !mu.isMatched() {
 		return nil
@@ -176,53 +164,64 @@ func (bot *robot) issueAssignOperate(e giteeclient.IssueNoteEvent, log *logrus.E
 
 	org, repo := e.GetOrgRep()
 	number := e.GetIssueNumber()
-	var execRes []string
 
-	execRm := func() {
-		lr := len(mu.Removes)
-		if lr == 1 {
-			cUser := mu.Removes[0]
-			if e.Issue.Assignee == nil || e.Issue.Assignee.Login == cUser {
-				execRes = append(execRes, fmt.Sprintf("unassign failed, because **%s** is not assignee.", cUser))
-				return
-			}
-
-			log.Info(fmt.Printf(logAssignIssueMsg, removeOperation, org, repo, number, mu.Removes))
-			if err := bot.cli.UnassignGiteeIssue(org, repo, number, cUser); err != nil {
-				log.Error(err)
-				execRes = append(execRes, fmt.Sprintf(assigneeErrMsg, cUser, unassignOperation))
-			}
-			return
-		}
-		if lr > 1 {
-			execRes = append(execRes, fmt.Sprintf(moreThenOneMsg, strings.Join(mu.Removes, ","), unassignOperation))
-			return
-		}
+	var results []string
+	isAssignee := func(login string) bool {
+		return e.Issue.Assignee != nil && e.Issue.Assignee.Login == login
 	}
 
-	execAdd := func() {
-		la := len(mu.Adds)
-		if la == 1 {
-			log.Info(fmt.Printf(logAssignIssueMsg, addOperation, org, repo, number, mu.Adds))
-
-			if err := bot.cli.AssignGiteeIssue(org, repo, number, mu.Adds[0]); err != nil {
-				log.Error(err)
-				execRes = append(execRes, fmt.Sprintf(assigneeErrMsg, mu.Adds[0], assignOperation))
-			}
-			return
-		}
-		if la > 1 {
-			execRes = append(execRes, fmt.Sprintf(moreThenOneMsg, strings.Join(mu.Adds, ","), assignOperation))
-		}
+	//add a assignee
+	if result := bot.issueAssigneeOperate(org, repo, number, mu.Adds, isAssignee, true, log); result != "" {
+		results = append(results, result)
 	}
 
-	execRm()
-	execAdd()
+	//remove assignee
+	if result := bot.issueAssigneeOperate(org, repo, number, mu.Removes, isAssignee, false, log); result != "" {
+		results = append(results, result)
+	}
 
-	return bot.createIssueComment(org, repo, number, e.GetCommenter(), e.Comment.HtmlUrl, execRes)
+	return bot.createIssueComment(org, repo, number, e.GetCommenter(), e.Comment.HtmlUrl, results)
 }
 
-func (bot *robot) issueCollaboratorOperate(e giteeclient.IssueNoteEvent, log *logrus.Entry) error {
+func (bot *robot) issueAssigneeOperate(org, repo, number string, users []string, isAssignee func(string) bool, isAdd bool, log *logrus.Entry) string {
+	length := len(users)
+	if length == 0 {
+		return ""
+	}
+
+	operate := "unassign"
+	if isAdd {
+		operate = "assign"
+	}
+
+	if length > 1 {
+		return fmt.Sprintf(moreThenOneMsg, strings.Join(users, ","), operate)
+	}
+
+	user := users[0]
+	if isAdd {
+		if isAssignee(user) {
+			return fmt.Sprintf("assign failed, because **%s** already is assignee.", user)
+		}
+
+		if err := bot.cli.AssignGiteeIssue(org, repo, number, user); err != nil {
+			log.Error(err)
+			return fmt.Sprintf(assigneeErrMsg, user, operate)
+		}
+	} else {
+		if !isAssignee(user) {
+			return fmt.Sprintf("unassign failed, because **%s** is not assignee.", user)
+		}
+		if err := bot.cli.UnassignGiteeIssue(org, repo, number, user); err != nil {
+			log.Error(err)
+			return fmt.Sprintf(assigneeErrMsg, user, operate)
+		}
+	}
+
+	return ""
+}
+
+func (bot *robot) handleIssueCollaborator(e giteeclient.IssueNoteEvent, log *logrus.Entry) error {
 	mu := matchCollaborator(e.GetComment(), e.GetCommenter())
 	if !mu.isMatched() {
 		return nil
@@ -234,16 +233,14 @@ func (bot *robot) issueCollaboratorOperate(e giteeclient.IssueNoteEvent, log *lo
 		return err
 	}
 
-	currentColls := func() sets.String {
-		ccs := sets.NewString()
-		for _, v := range e.Issue.Collaborators {
-			ccs.Insert(v.Login)
-		}
-		return ccs
-	}()
+	currentColls := sets.NewString()
+	for _, v := range e.Issue.Collaborators {
+		currentColls.Insert(v.Login)
+	}
 
 	var cResult []string
-	filterAdds := func() sets.String {
+	//filter legitimate collaborators that need to be added
+	canAdds := func() sets.String {
 		addSet := sets.NewString()
 		if len(mu.Adds) == 0 {
 			return addSet
@@ -253,21 +250,23 @@ func (bot *robot) issueCollaboratorOperate(e giteeclient.IssueNoteEvent, log *lo
 		// assignee can not be at collaborator
 		if e.Issue.Assignee != nil {
 			if v := e.Issue.Assignee.Login; addSet.Has(v) {
-				cResult = append(cResult, fmt.Sprintf("the assignee(**%s**) can't be collaborator at same time", v))
 				addSet.Delete(v)
+				cResult = append(cResult, fmt.Sprintf("the assignee **%s**  can't be collaborator at same time.", v))
 			}
 		}
 
 		// issue's collaborator must be repository collaborator
 		if v := addSet.Difference(repoColls); v.Len() > 0 {
-			cResult = append(cResult, fmt.Sprintf("these persons(**%s**) are not allowed to be added as collaborators which must be the member of repository.", strings.Join(v.List(), ", ")))
 			addSet = addSet.Difference(v)
+			msFmt := "these persons(**%s**) are not allowed to be added as collaborators which must be the member of repository."
+			cResult = append(cResult, fmt.Sprintf(msFmt, strings.Join(v.List(), ", ")))
 		}
 
 		return addSet
-	}
+	}()
 
-	filterRms := func() sets.String {
+	//filter legitimate collaborators that need to be removed
+	canRemoves := func() sets.String {
 		rmSet := sets.NewString()
 		if len(mu.Removes) == 0 {
 			return rmSet
@@ -279,16 +278,13 @@ func (bot *robot) issueCollaboratorOperate(e giteeclient.IssueNoteEvent, log *lo
 			cResult = append(cResult, fmt.Sprintf(missFmt, strings.Join(v.List(), ", ")))
 		}
 		return rmSet
-	}
-
-	canAdds := filterAdds()
-	canRms := filterRms()
+	}()
 
 	// filter the need updates collaborators.
 	// remove issue collaborators who are no longer collaborators of the repository.
-	// remove canRms collaborators.
+	// remove canRemoves collaborators .
 	// add canAdds collaborators.
-	updates := currentColls.Intersection(repoColls).Difference(canRms).Union(canAdds)
+	updates := currentColls.Intersection(repoColls).Difference(canRemoves).Union(canAdds)
 
 	//for gitee api "0" means empty collaborator
 	collaborator := "0"
@@ -301,20 +297,21 @@ func (bot *robot) issueCollaboratorOperate(e giteeclient.IssueNoteEvent, log *lo
 		Repo:          repo,
 		Collaborators: collaborator,
 	}
-	updatesWithComment := strings.Join(canAdds.Union(canRms).List(), ",")
+
 	if _, err = bot.cli.UpdateIssue(org, number, param); err != nil {
+		updatesWithComment := strings.Join(canAdds.Union(canRemoves).List(), ",")
+		cResult = append(cResult, fmt.Sprintf("update issue's collaborators %s failed.", updatesWithComment))
 		log.Error(err)
-		cResult = append(cResult, fmt.Sprintf("update issue's collaborators %s failed", updatesWithComment))
 	}
 
 	return bot.createIssueComment(org, repo, number, e.GetCommenter(), e.Comment.HtmlUrl, cResult)
 }
 
-func (bot *robot) createIssueComment(org, repo, number, commenter, url string, messges []string) error {
-	if len(messges) == 0 {
+func (bot *robot) createIssueComment(org, repo, number, commenter, url string, messages []string) error {
+	if len(messages) == 0 {
 		return nil
 	}
-	comment := genExecCommandComment(commenter, url, messges)
+	comment := genExecCommandComment(commenter, url, messages)
 	return bot.cli.CreateIssueComment(org, repo, number, comment)
 }
 
