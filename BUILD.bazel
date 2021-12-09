@@ -20,6 +20,7 @@ push_image(
 go_library(
     name = "go_default_library",
     srcs = [
+        "assign.go",
         "config.go",
         "main.go",
         "match.go",
