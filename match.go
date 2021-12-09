@@ -1,13 +1,14 @@
 package main
 
 import (
+	"k8s.io/apimachinery/pkg/util/sets"
 	"regexp"
 	"strings"
 )
 
 type matchUsers struct {
-	Adds    []string
-	Removes []string
+	Adds    sets.String
+	Removes sets.String
 }
 
 func (mu *matchUsers) isMatched() bool {
@@ -47,13 +48,13 @@ func matchCollaborator(comment, commenter string) *matchUsers {
 }
 
 func extractMatchUsers(commenter string, matches [][]string, isAdd func(string) bool) *matchUsers {
-	var toAdd, toRemove []string
-
+	toAdd := sets.NewString()
+	toRemove := sets.NewString()
 	save := func(login string, isAdd bool) {
 		if isAdd {
-			toAdd = append(toAdd, login)
+			toAdd.Insert(login)
 		} else {
-			toRemove = append(toRemove, login)
+			toRemove.Insert(login)
 		}
 	}
 
