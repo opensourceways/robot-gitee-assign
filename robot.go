@@ -3,16 +3,13 @@ package main
 import (
 	"errors"
 
-	sdk "gitee.com/openeuler/go-gitee/gitee"
-	libconfig "github.com/opensourceways/community-robot-lib/config"
-	"github.com/opensourceways/community-robot-lib/giteeclient"
-	libplugin "github.com/opensourceways/community-robot-lib/giteeplugin"
+	"github.com/opensourceways/community-robot-lib/config"
+	"github.com/opensourceways/community-robot-lib/robot-gitee-framework"
+	sdk "github.com/opensourceways/go-gitee/gitee"
 	"github.com/sirupsen/logrus"
 )
 
-const (
-	botName = "assign"
-)
+const botName = "assign"
 
 type iClient interface {
 	ListCollaborators(org, repo string) ([]sdk.ProjectMember, error)
@@ -33,39 +30,38 @@ type robot struct {
 	cli iClient
 }
 
-func (bot *robot) NewPluginConfig() libconfig.PluginConfig {
+func (bot *robot) NewConfig() config.Config {
 	return &configuration{}
 }
 
-func (bot *robot) getConfig(cfg libconfig.PluginConfig) (*configuration, error) {
+func (bot *robot) getConfig(cfg config.Config) (*configuration, error) {
 	if c, ok := cfg.(*configuration); ok {
 		return c, nil
 	}
 	return nil, errors.New("can't convert to configuration")
 }
 
-func (bot *robot) RegisterEventHandler(p libplugin.HandlerRegitster) {
-	p.RegisterNoteEventHandler(bot.handleNoteEvent)
+func (bot *robot) RegisterEventHandler(f framework.HandlerRegitster) {
+	f.RegisterNoteEventHandler(bot.handleNoteEvent)
 }
 
-func (bot *robot) handleNoteEvent(e *sdk.NoteEvent, cfg libconfig.PluginConfig, log *logrus.Entry) error {
-	ew := giteeclient.NewNoteEventWrapper(e)
-	if !ew.IsCreatingCommentEvent() {
+func (bot *robot) handleNoteEvent(e *sdk.NoteEvent, c config.Config, log *logrus.Entry) error {
+	if !e.IsCreatingCommentEvent() {
 		log.Debug("Event is not a creation of a comment, skipping.")
 		return nil
 	}
 
-	config, err := bot.getConfig(cfg)
+	config, err := bot.getConfig(c)
 	if err != nil {
 		return err
 	}
 
-	bCfg := config.configFor(ew.GetOrgRep())
-	if bCfg == nil {
+	cfg := config.configFor(e.GetOrgRepo())
+	if cfg == nil {
 		return nil
 	}
 
-	if h := newHandler(bot.cli, ew, bCfg, log); h != nil {
+	if h := newHandler(bot.cli, e, cfg, log); h != nil {
 		return h.handle()
 	}
 

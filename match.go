@@ -1,9 +1,10 @@
 package main
 
 import (
-	"k8s.io/apimachinery/pkg/util/sets"
 	"regexp"
 	"strings"
+
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 type matchUsers struct {

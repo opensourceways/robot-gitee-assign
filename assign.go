@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	sdk "gitee.com/openeuler/go-gitee/gitee"
 	"github.com/opensourceways/community-robot-lib/giteeclient"
 	"github.com/opensourceways/community-robot-lib/utils"
+	sdk "github.com/opensourceways/go-gitee/gitee"
 	"github.com/sirupsen/logrus"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
@@ -310,15 +310,15 @@ func (ai *assignIssue) handle() error {
 		mErr.AddError(ai.handleAssign())
 	}
 
-	if ai.cfg.EnableCollaboratorOption {
+	if ai.cfg.EnableIssueCollaborator {
 		mErr.AddError(ai.handleCollaborators())
 	}
 
 	return mErr.Err()
 }
 
-func newHandler(c iClient, e giteeclient.NoteEventWrapper, cfg *botConfig, log *logrus.Entry) handler {
-	org, repo := e.GetOrgRep()
+func newHandler(c iClient, e *sdk.NoteEvent, cfg *botConfig, log *logrus.Entry) handler {
+	org, repo := e.GetOrgRepo()
 	comm := common{
 		cli:        c,
 		cfg:        cfg,
@@ -326,8 +326,8 @@ func newHandler(c iClient, e giteeclient.NoteEventWrapper, cfg *botConfig, log *
 		org:        org,
 		repo:       repo,
 		commenter:  e.GetCommenter(),
-		comment:    e.GetComment(),
-		commentUrl: e.NoteEvent.GetComment().HtmlUrl,
+		comment:    e.GetComment().GetBody(),
+		commentUrl: e.GetComment().GetHtmlUrl(),
 	}
 
 	if e.IsPullRequest() {
