@@ -20,10 +20,12 @@ push_image(
 go_library(
     name = "go_default_library",
     srcs = [
-        "assign.go",
+        "cmd.go",
         "config.go",
+        "issue_assign.go",
+        "issue_collaborator.go",
         "main.go",
-        "match.go",
+        "pr_assign.go",
         "robot.go",
     ],
     importpath = "github.com/opensourceways/robot-gitee-assign",

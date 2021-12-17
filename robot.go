@@ -20,6 +20,7 @@ type iClient interface {
 	CreateIssueComment(org, repo string, number string, comment string) error
 	CreatePRComment(org, repo string, number int32, comment string) error
 	UpdateIssue(owner, number string, param sdk.IssueUpdateParam) (sdk.Issue, error)
+	GetRepo(org, repo string) (sdk.Project, error)
 }
 
 func newRobot(cli iClient) *robot {
@@ -61,8 +62,22 @@ func (bot *robot) handleNoteEvent(e *sdk.NoteEvent, c config.Config, log *logrus
 		return nil
 	}
 
-	if h := newHandler(bot.cli, e, cfg, log); h != nil {
-		return h.handle()
+	if e.IsIssue() && e.IsIssueOpen() {
+		if cfg.EnableIssueAssign {
+			if err := bot.handleIssueAssign(e); err != nil {
+				return err
+			}
+		}
+
+		if cfg.EnableIssueCollaborator {
+			return bot.handleIssueCollaborator(e)
+		}
+
+		return nil
+	}
+
+	if cfg.EnablePRAssign && e.IsPullRequest() && e.IsPROpen() {
+		return bot.handlePRAssign(e)
 	}
 
 	return nil
