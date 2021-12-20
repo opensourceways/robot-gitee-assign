@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/opensourceways/community-robot-lib/giteeclient"
 	"github.com/opensourceways/community-robot-lib/utils"
 	sdk "github.com/opensourceways/go-gitee/gitee"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -20,33 +21,36 @@ func (bot *robot) handlePRAssign(e *sdk.NoteEvent) error {
 	org, repo := e.GetOrgRepo()
 
 	writeComment := func(s string) error {
-		return bot.cli.CreatePRComment(org, repo, e.GetPRNumber(), s)
+		return bot.cli.CreatePRComment(
+			org, repo, e.GetPRNumber(),
+			giteeclient.GenResponseWithReference(e, s),
+		)
 	}
 
 	if v := assign.Intersection(unassign); v.Len() > 0 {
 		return writeComment(fmt.Sprintf(
-			"@%s , conflict people exist who are: %s",
-			e.GetCommenter(),
+			"conflict people who are: %s exist",
 			strings.Join(v.UnsortedList(), ", "),
 		))
 	}
 
 	if assign.Len() > 0 {
-		repo, err := bot.cli.GetRepo(org, repo)
+		r, err := bot.cli.GetRepo(org, repo)
 		if err != nil {
 			return err
 		}
-		members := sets.NewString(repo.GetMembers()...)
+
+		members := sets.NewString(r.GetMembers()...)
 
 		if v := assign.Difference(members); v.Len() > 0 {
-			invalidOnes := fmt.Sprintf(
+			msg := fmt.Sprintf(
 				"These people( %s ) are not the member of repo.",
 				strings.Join(v.List(), ", "),
 			)
 
 			writeComment(fmt.Sprintf(
-				"@%s , the following people can't be added as reviewers of pr with reasons bellow.\n%s",
-				e.GetCommenter(), invalidOnes,
+				"The following people can't be added as reviewers of pr with reasons bellow.\n%s",
+				msg,
 			))
 
 			assign = assign.Difference(v)

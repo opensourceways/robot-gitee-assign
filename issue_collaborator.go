@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/opensourceways/community-robot-lib/giteeclient"
 	sdk "github.com/opensourceways/go-gitee/gitee"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
@@ -19,13 +20,15 @@ func (bot *robot) handleIssueCollaborator(e *sdk.NoteEvent) error {
 	org, repo := e.GetOrgRepo()
 
 	writeComment := func(s string) error {
-		return bot.cli.CreateIssueComment(org, repo, e.GetIssueNumber(), s)
+		return bot.cli.CreateIssueComment(
+			org, repo, e.GetIssueNumber(),
+			giteeclient.GenResponseWithReference(e, s),
+		)
 	}
 
 	if v := assign.Intersection(unassign); v.Len() > 0 {
 		return writeComment(fmt.Sprintf(
-			"@%s , conflict people exist who are: %s",
-			e.GetCommenter(),
+			"conflict people who are: %s exist",
 			strings.Join(v.UnsortedList(), ", "),
 		))
 	}
@@ -33,38 +36,37 @@ func (bot *robot) handleIssueCollaborator(e *sdk.NoteEvent) error {
 	issue := e.GetIssue()
 
 	if assign.Len() > 0 {
-		repo, err := bot.cli.GetRepo(org, repo)
+		r, err := bot.cli.GetRepo(org, repo)
 		if err != nil {
 			return err
 		}
 
+		members := sets.NewString(r.GetMembers()...)
 		invalidOnes := []string{}
-
-		currentAssignee := issue.GetAssignee().GetLogin()
-		if assign.Has(currentAssignee) {
-			invalidOnes = append(invalidOnes, fmt.Sprintf(
-				"Can't add the assignee( %s ) as collaborator",
-				currentAssignee,
-			))
-
-			assign.Delete(currentAssignee)
-		}
-
-		members := sets.NewString(repo.GetMembers()...)
 
 		if v := assign.Difference(members); v.Len() > 0 {
 			invalidOnes = append(invalidOnes, fmt.Sprintf(
-				"These people( %s ) who are not the member of repo are not allowed to be added as collaborators of issue.",
+				"These people( %s ) are not the member of repo.",
 				strings.Join(v.List(), ", "),
 			))
 
 			assign = assign.Difference(v)
 		}
 
+		currentAssignee := issue.GetAssignee().GetLogin()
+
+		if assign.Has(currentAssignee) {
+			invalidOnes = append(invalidOnes, fmt.Sprintf(
+				"%s is already the assignee of issue and can't be added as collaborator",
+				currentAssignee,
+			))
+
+			assign.Delete(currentAssignee)
+		}
+
 		if len(invalidOnes) > 0 {
 			writeComment(fmt.Sprintf(
-				"@%s , the following people can't be added as collaborators of issue with reasons bellow.\n%s",
-				e.GetCommenter(),
+				"The following people can't be added as collaborators of issue with reasons bellow.\n%s",
 				strings.Join(invalidOnes, "\n"),
 			))
 		}

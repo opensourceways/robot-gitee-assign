@@ -12,7 +12,7 @@ const (
 	msgMultipleAssignee           = "Can only assign one assignee to the issue."
 	msgAssignRepeatedly           = "This issue is already assigned to ***%s***. Please do not assign repeatedly."
 	msgNotAllowAssign             = "This issue can not be assigned to ***%s***. Please try to assign to the repository collaborators."
-	msgCollaboratorCantAsAssignee = "The issue collaborator ***%s*** cannot be assigned as the assignee at the same time."
+	msgCollaboratorCantAsAssignee = "***%s*** is already the issue collaborator and cannot be assigned as the assignee."
 )
 
 func (bot *robot) handleIssueAssign(e *sdk.NoteEvent) error {
@@ -27,7 +27,9 @@ func (bot *robot) handleIssueAssign(e *sdk.NoteEvent) error {
 	currentAssignee := issue.GetAssignee().GetLogin()
 
 	writeComment := func(s string) error {
-		return bot.cli.CreateIssueComment(org, repo, number, s)
+		return bot.cli.CreateIssueComment(
+			org, repo, number, giteeclient.GenResponseWithReference(e, s),
+		)
 	}
 
 	if n := assign.Len(); n > 0 {
@@ -49,9 +51,11 @@ func (bot *robot) handleIssueAssign(e *sdk.NoteEvent) error {
 		if err == nil {
 			return nil
 		}
+
 		if _, ok := err.(giteeclient.ErrorForbidden); ok {
 			return writeComment(fmt.Sprintf(msgNotAllowAssign, newOne))
 		}
+
 		return err
 	}
 

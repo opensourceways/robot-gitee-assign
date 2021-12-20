@@ -47,6 +47,7 @@ func main() {
 	if err := secretAgent.Start([]string{o.gitee.TokenPath}); err != nil {
 		logrus.WithError(err).Fatal("Error starting secret agent.")
 	}
+
 	defer secretAgent.Stop()
 
 	c := giteeclient.NewClient(secretAgent.GetTokenGenerator(o.gitee.TokenPath))
