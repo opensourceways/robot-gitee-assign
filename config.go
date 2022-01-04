@@ -1,6 +1,6 @@
 package main
 
-import libconfig "github.com/opensourceways/community-robot-lib/config"
+import "github.com/opensourceways/community-robot-lib/config"
 
 type configuration struct {
 	ConfigItems []botConfig `json:"config_items,omitempty"`
@@ -12,12 +12,12 @@ func (c *configuration) configFor(org, repo string) *botConfig {
 	}
 
 	items := c.ConfigItems
-	v := make([]libconfig.IPluginForRepo, len(items))
+	v := make([]config.IRepoFilter, len(items))
 	for i := range items {
 		v[i] = &items[i]
 	}
 
-	if i := libconfig.FindConfig(org, repo, v); i >= 0 {
+	if i := config.Find(org, repo, v); i >= 0 {
 		return &items[i]
 	}
 	return nil
@@ -49,20 +49,21 @@ func (c *configuration) SetDefault() {
 }
 
 type botConfig struct {
-	libconfig.PluginForRepo
-	// EnablePRAssign controls whether the assign command is valid for PR, default false.
+	config.RepoFilter
+
+	// EnablePRAssign indicates whether to enable manaing the PR reviewers, default false.
 	EnablePRAssign bool `json:"enable_pr_assign,omitempty"`
 
-	// EnableIssueAssign controls whether the assign command is valid for issue, default false.
+	// EnableIssueAssign indicates whether to enable managing the issue assignee, default false.
 	EnableIssueAssign bool `json:"enable_issue_assign,omitempty"`
 
-	// EnableCollaboratorOption controls whether the collaborator command is valid for issue,default false.
-	EnableCollaboratorOption bool `json:"enable_collaborator_option,omitempty"`
+	// EnableIssueCollaborator indicates whether to enable managing the issue collaborators, default false.
+	EnableIssueCollaborator bool `json:"enable_issue_collaborator,omitempty"`
 }
 
 func (c *botConfig) setDefault() {
 }
 
 func (c *botConfig) validate() error {
-	return c.PluginForRepo.Validate()
+	return c.RepoFilter.Validate()
 }
