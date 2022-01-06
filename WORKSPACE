@@ -540,15 +540,15 @@ go_repository(
 go_repository(
     name = "com_github_opensourceways_community_robot_lib",
     importpath = "github.com/opensourceways/community-robot-lib",
-    sum = "h1:2pLx29hPS98ZmPxmf+9m4MjS1HFTQ66IK2S9/2rVrTA=",
-    version = "v0.0.0-20220105015601-e6cdd5b85cff",
+    sum = "h1:Sg5NYbzlD6h1jrPtVRAZmGduLYkaiaiJ26Dv5h9MSy0=",
+    version = "v0.0.0-20220106023803-5440edf1bb49",
 )
 
 go_repository(
     name = "com_github_opensourceways_go_gitee",
     importpath = "github.com/opensourceways/go-gitee",
-    sum = "h1:Spuhf5oSV5n5ZpaKdEAVd3qEeP0O5qew7LdmhrSJ+YU=",
-    version = "v0.0.0-20211217093747-04a27605275e",
+    sum = "h1:xkMOH8c39WYn60h271MHrxJrA8trgX0DHZSLOE4lFAI=",
+    version = "v0.0.0-20211230094517-effa55336a8b",
 )
 
 go_repository(
