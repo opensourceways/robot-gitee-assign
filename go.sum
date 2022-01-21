@@ -172,8 +172,9 @@ github.com/onsi/gomega v1.7.1/go.mod h1:XdKZgCCFLUoM/7CFJVPcG8C1xQ1AJ0vpAezJrB7J
 github.com/onsi/gomega v1.10.1/go.mod h1:iN09h71vgCQne3DLsj+A5owkum+a2tYe+TOCB1ybHNo=
 github.com/opensourceways/community-robot-lib v0.0.0-20220118064921-28924d0a1246 h1:+F518thKLJdB/ywb9N2aa3TwU8TmgZjBor0zS5QeHXc=
 github.com/opensourceways/community-robot-lib v0.0.0-20220118064921-28924d0a1246/go.mod h1:MRtghL8OdtTsmOtz5EH0mrJifyZ0wlZhDYISn6vRoeA=
-github.com/opensourceways/go-gitee v0.0.0-20220118023153-0c41490fb43b h1:iVRo+1ZmLYfDA6beHuDoJeteGtDqzUIbXN5EdQ9z0Bo=
 github.com/opensourceways/go-gitee v0.0.0-20220118023153-0c41490fb43b/go.mod h1:yvVsEMhp7frMblzN1sco4C7cRlnlpqkkn3O2JQNdRu0=
+github.com/opensourceways/go-gitee v0.0.0-20220120022149-6d34985edf4f h1:L9QeiOlWyPcQTdNynF9L3zL6Yeq/+4L43cyO3vPROQE=
+github.com/opensourceways/go-gitee v0.0.0-20220120022149-6d34985edf4f/go.mod h1:yvVsEMhp7frMblzN1sco4C7cRlnlpqkkn3O2JQNdRu0=
 github.com/pkg/errors v0.9.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
